@@ -1,0 +1,51 @@
+name: Build setup app
+
+on:
+  push:
+    branches: [main, "copilot/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            artifact: Ableton-MCP-Setup-macOS-Apple-Silicon
+          - os: macos-15-intel
+            artifact: Ableton-MCP-Setup-macOS-Intel
+          - os: windows-latest
+            artifact: Ableton-MCP-Setup-Windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest discover -s tests -v
+      - run: python -m pip install pyinstaller==6.16.0
+      - name: Build Windows app
+        if: runner.os == 'Windows'
+        run: python -m PyInstaller --noconfirm --clean --windowed --onefile --name "Ableton MCP Setup" app.py
+      - name: Verify Windows app starts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath "dist/Ableton MCP Setup.exe" -ArgumentList "--self-test" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { exit $process.ExitCode }
+      - name: Build macOS app
+        if: runner.os == 'macOS'
+        run: |
+          python -m PyInstaller --noconfirm --clean --windowed --name "Ableton MCP Setup" app.py
+          "dist/Ableton MCP Setup.app/Contents/MacOS/Ableton MCP Setup" --self-test
+          ditto -c -k --sequesterRsrc --keepParent "dist/Ableton MCP Setup.app" "dist/${{ matrix.artifact }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ runner.os == 'Windows' && 'dist/Ableton MCP Setup.exe' || format('dist/{0}.zip', matrix.artifact) }}
+          if-no-files-found: error
