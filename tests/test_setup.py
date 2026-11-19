@@ -68,10 +68,13 @@ class ConfigurationTests(unittest.TestCase):
         self.path.write_text('{"servers": {}}\n')
         os.chmod(self.path, 0o644)
         configure_client(self.path, "vscode", "uvx")
-        self.assertEqual(self.path.stat().st_mode & 0o777, 0o644)
+        # NTFS emulates POSIX permission bits; mode round-trips only on POSIX.
+        if os.name == "posix":
+            self.assertEqual(self.path.stat().st_mode & 0o777, 0o644)
         backups = list(self.path.parent.glob("*.bak"))
         self.assertEqual(len(backups), 1)
-        self.assertEqual(backups[0].stat().st_mode & 0o777, 0o644)
+        if os.name == "posix":
+            self.assertEqual(backups[0].stat().st_mode & 0o777, 0o644)
         fresh_dir = Path(self.tmp.name) / "fresh"
         fresh_dir.mkdir()
         result = configure_client(fresh_dir / "config.json", "vscode", "uvx")
