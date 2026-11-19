@@ -1,4 +1,4 @@
-# friendly-disco
+# Ableton MCP Link
 
 Tools for Ableton Live 12.
 
@@ -30,8 +30,9 @@ notarization require an Apple developer account and are not configured here.
    if it is not installed; reopen the app afterwards. Internet access is needed
    for uv to fetch the pinned MCP package and its dependencies.
 3. If your Ableton User Library is not at the default location, choose it with
-   **Browse**. Click **Install Ableton Remote Script**. Existing, different
-   scripts are not replaced.
+   **Browse**. Click **Install Ableton Remote Script**; existing, different
+   scripts are not replaced by the upstream pinned `mcp-server-ableton-live`
+   install command.
 4. Restart Live. In **Settings > Tempo & MIDI**, select **AbletonMCP** in an
    unused Control Surface row and set its input and output to **None**.
 5. Configure the client(s) you use, then restart them. In VS Code, start the

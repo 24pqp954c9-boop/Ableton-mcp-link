@@ -97,15 +97,30 @@ class SetupApp(tk.Tk):
 
     def worker(self, action, library):
         try:
-            uvx = find_uvx()
-            if action in ("install", "doctor"):
-                message = run_bridge(uvx, action, library)
-            else:
-                path = client_path(action, platform.system(), Path.home(), os.environ.get("APPDATA"))
-                message = configure_client(path, action, uvx)
-        except (OSError, ValueError, RuntimeError, TimeoutExpired) as exc:
-            message = f"Setup did not complete: {exc}"
-        self.after(0, self.finished, message)
+            try:
+                uvx = find_uvx()
+                if action in ("install", "doctor"):
+                    message = run_bridge(uvx, action, library)
+                else:
+                    path = client_path(action, platform.system(), Path.home(), os.environ.get("APPDATA"))
+                    message = configure_client(path, action, uvx)
+            except TimeoutExpired:
+                message = ("Setup did not complete (timed out — first run downloads "
+                           "packages; try again, uv caches partial downloads).")
+            except (OSError, ValueError, RuntimeError) as exc:
+                message = f"Setup did not complete: {exc}"
+            self.after(0, self.finished, message)
+        except Exception as exc:
+            # An unexpected error, or even a failure to schedule onto Tk, must
+            # never kill this daemon thread silently with all buttons disabled.
+            message = f"Unexpected error ({type(exc).__name__}): {exc}"
+            try:
+                self.after(0, self.finished, message)
+            except Exception:
+                try:
+                    self.log(message)
+                except Exception:
+                    pass  # the GUI itself is gone; nothing left to report to
 
     def finished(self, message):
         self.log(message)

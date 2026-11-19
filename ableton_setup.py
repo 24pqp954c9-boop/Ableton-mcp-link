@@ -17,9 +17,14 @@ def find_uvx():
     found = shutil.which(executable)
     if found:
         return str(Path(found).resolve())
-    for folder in (Path.home() / ".local" / "bin", Path.home() / ".cargo" / "bin"):
+    for folder in (
+        Path.home() / ".local" / "bin",
+        Path.home() / ".cargo" / "bin",
+        Path("/opt/homebrew/bin"),  # Apple Silicon Homebrew
+        Path("/usr/local/bin"),
+    ):
         candidate = folder / executable
-        if candidate.is_file():
+        if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate)
     raise FileNotFoundError(
         "uvx was not found. Install uv using the Install uv button, "
@@ -57,9 +62,17 @@ def configure_client(path, client, uvx):
             "Install and open the client once, then try again."
         )
     existing = path.exists()
+    original_bytes = None
+    original_mode = None
     if existing:
+        # NamedTemporaryFile is always 0600; remember the real mode to restore it.
         try:
-            data = json.loads(path.read_text(encoding="utf-8-sig"))
+            original_mode = os.stat(path).st_mode & 0o777
+        except OSError:
+            original_mode = None  # file vanished; treat as new and keep temp default
+        try:
+            original_bytes = path.read_bytes()
+            data = json.loads(original_bytes.decode("utf-8-sig"))
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise ValueError(
                 f"Cannot safely edit {path}: it is not standard JSON. "
@@ -84,14 +97,15 @@ def configure_client(path, client, uvx):
             "Review it manually; no changes made."
         )
     servers[SERVER_NAME] = entry
-    if existing:
+    backup_path = None
+    if existing and original_bytes is not None:
         with tempfile.NamedTemporaryFile(
             mode="wb", prefix=path.name + ".", suffix=".bak", dir=path.parent, delete=False
         ) as backup:
-            backup.write(path.read_bytes())
+            backup.write(original_bytes)  # exact pre-image bytes parsed above
             backup_path = backup.name
-    else:
-        backup_path = None
+        if original_mode is not None:
+            os.chmod(backup_path, original_mode)  # .bak inherits the original mode
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -100,6 +114,8 @@ def configure_client(path, client, uvx):
             temporary = Path(out.name)
             json.dump(data, out, indent=2, ensure_ascii=False)
             out.write("\n")
+        if original_mode is not None:
+            os.chmod(temporary, original_mode)  # keep perms through the atomic replace
         os.replace(temporary, path)
     finally:
         if temporary and temporary.exists():

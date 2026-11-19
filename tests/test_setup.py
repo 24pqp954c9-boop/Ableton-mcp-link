@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -62,6 +63,21 @@ class ConfigurationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not standard JSON"):
             configure_client(self.path, "vscode", "uvx")
         self.assertEqual(self.path.read_text(), original)
+
+    def test_file_mode_preserved_and_new_parent_creates_config(self):
+        self.path.write_text('{"servers": {}}\n')
+        os.chmod(self.path, 0o644)
+        configure_client(self.path, "vscode", "uvx")
+        self.assertEqual(self.path.stat().st_mode & 0o777, 0o644)
+        backups = list(self.path.parent.glob("*.bak"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].stat().st_mode & 0o777, 0o644)
+        fresh_dir = Path(self.tmp.name) / "fresh"
+        fresh_dir.mkdir()
+        result = configure_client(fresh_dir / "config.json", "vscode", "uvx")
+        self.assertIn("Configured:", result)
+        data = json.loads((fresh_dir / "config.json").read_text())
+        self.assertEqual(data["servers"][SERVER_NAME]["args"], [PACKAGE])
 
     def test_bad_section_and_missing_parent(self):
         self.path.write_text('{"mcpServers": []}')
